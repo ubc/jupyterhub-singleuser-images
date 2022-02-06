@@ -1,5 +1,5 @@
 # Distributed under the terms of the Modified BSD License.
-ARG BASE_CONTAINER=jupyter/r-notebook
+ARG BASE_CONTAINER=jupyter/datascience-notebook
 FROM $BASE_CONTAINER
 
 LABEL maintainer="Rahim Khoja <rahim.khoja@ubc.ca>"
