@@ -4,23 +4,26 @@ FROM $BASE_CONTAINER
 
 LABEL maintainer="Rahim Khoja <rahim.khoja@ubc.ca>"
 
-# Install Plotly Packages on conda-forge
-RUN conda install --quiet --yes -c conda-forge \
-  plotly 
+# Install Plotly conda packages
+RUN conda install "jupyterlab>=3" "ipywidgets>=7.6"
+RUN conda install -c conda-forge -c plotly jupyter-dash
 
 # Install jupyter extensions (nbgitpuller, git, jupytext)
-USER root
-
-RUN pip install nbgitpuller \
-  && jupyter serverextension enable --sys-prefix nbgitpuller \
+RUN pip install git+https://github.com/data-8/nbgitpuller \
   && pip install jupyterlab-git \
-  && pip install jupytext --upgrade \
+  && pip install jupytext --upgrade
+
+RUN jupyter labextension install jupyterlab-plotly \
+  && jupyter labextension install @jupyter-widgets/jupyterlab-manager plotlywidget \
   && jupyter labextension install @techrah/text-shortcuts \
+  && jupyter serverextension enable --sys-prefix nbgitpuller \
   && jupyter lab build
 
-COPY rm-merge-shortcut.py /tmp/user-settings/\@jupyterlab/shortcuts-extension/shortcuts.jupyterlab-settings
+# nbgitpuller looks in incorrect Jinja2 Directory for Template. Temporary Solution is to Copy the files to the correct location
+# https://github.com/jupyterhub/nbgitpuller/issues/235#issuecomment-976170694
+RUN cp /opt/conda/lib/python3.9/site-packages/nbgitpuller/templates/* /opt/conda/lib/python3.9/site-packages/notebook/templates/
 
-RUN jupyter serverextension enable nbgitpuller --sys-prefix
+COPY rm-merge-shortcut.py /tmp/user-settings/\@jupyterlab/shortcuts-extension/shortcuts.jupyterlab-settings
 
 ENV HOME=/home/jovyan
 ENV PIPELINE=github-actions
