@@ -4,6 +4,8 @@ FROM $BASE_CONTAINER
 
 LABEL maintainer="Rahim Khoja <rahim.khoja@ubc.ca>"
 
+USER root
+
 # Update System Packages for SageMath
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -12,12 +14,13 @@ RUN apt-get update && \
     imagemagick \
     texlive \
     tk tk-dev \
-    jq && \
-    rm -rf /var/lib/apt/lists/*
+    jq
+
+USER jovyan
 
 # Install Conda Packages (Plotly, SageMath)
 RUN conda install --quiet --yes -n base -c conda-forge widgetsnbextension && \
-    conda create --quiet --yes -n sage -c conda-forge && \
+    conda create --quiet --yes -n sage sage python=3.9 && \
     npm cache clean --force && \
     fix-permissions $CONDA_DIR && \
     fix-permissions /home/jovyan
@@ -32,36 +35,54 @@ RUN pip install git+https://github.com/data-8/nbgitpuller \
 # Install sagemath kernel and extensions using conda run:
 #   Create jupyter directories if they are missing
 #   Add environmental variables to sage kernal using jq
-RUN echo ' \
-        from sage.repl.ipython_kernel.install import SageKernelSpec; \
-        SageKernelSpec.update(prefix=os.environ["CONDA_DIR"]); \
-    ' | conda run -n sage sage && \
-    echo ' \
-        cat $SAGE_ROOT/etc/conda/activate.d/sage-activate.sh | \
-            grep -Po '"'"'(?<=^export )[A-Z_]+(?=)'"'"' | \
-            jq --raw-input '"'"'.'"'"' | jq -s '"'"'.'"'"' | \
-            jq --argfile kernel $SAGE_LOCAL/share/jupyter/kernels/sagemath/kernel.json \
-            '"'"'. | map(. as $k | env | .[$k] as $v | {($k):$v}) | add as $vars | $kernel | .env= $vars'"'"' > \
-            $CONDA_DIR/share/jupyter/kernels/sagemath/kernel.json \
-    ' | conda run -n sage sh && \
-    fix-permissions $CONDA_DIR && \
-    fix-permissions /home/jovyan
+
+USER root
+
+RUN /opt/conda/envs/sage/bin/sage -c "install_scripts('/usr/local/bin')"
+ARG SAGE_ROOT=/opt/conda/envs/sage/
+ENV SAGE_ROOT=/opt/conda/envs/sage/
+
+RUN ln -s "/opt/conda/envs/sage/bin/sage" /usr/bin/sage
+RUN ln -s /usr/bin/sage /usr/bin/sagemath
+
+RUN apt-get update && apt-get autoclean && apt-get clean && apt-get autoremove
+
+
+USER jovyan
+
+#RUN echo ' \
+#        from sage.repl.ipython_kernel.install import SageKernelSpec; \
+#        SageKernelSpec.update(prefix=os.environ["CONDA_DIR"]); \
+#    ' | conda run -n sage sage && \
+#    echo ' \
+#        cat $SAGE_ROOT/etc/conda/activate.d/sage-activate.sh | \
+#            grep -Po '"'"'(?<=^export )[A-Z_]+(?=)'"'"' | \
+#            jq --raw-input '"'"'.'"'"' | jq -s '"'"'.'"'"' | \
+#            jq --argfile kernel $SAGE_LOCAL/share/jupyter/kernels/sagemath/kernel.json \
+#            '"'"'. | map(. as $k | env | .[$k] as $v | {($k):$v}) | add as $vars | $kernel | .env= $vars'"'"' > \
+#            $CONDA_DIR/share/jupyter/kernels/sagemath/kernel.json \
+#    ' | conda run -n sage sh && \
+#    fix-permissions $CONDA_DIR && \
+#    fix-permissions /home/jovyan
 
 # Install sage's python kernel
-RUN echo ' \
-        ls /opt/conda/envs/sage/share/jupyter/kernels/ | \
-            grep -Po '"'"'python\d'"'"' | \
-            xargs -I % sh -c '"'"' \
-                cd $SAGE_LOCAL/share/jupyter/kernels/% && \
-                cat kernel.json | \
-                    jq '"'"'"'"'"'"'"'"' . | .display_name = .display_name + " (sage)" '"'"'"'"'"'"'"'"' > \
-                    kernel.json.modified && \
-                mv -f kernel.json.modified kernel.json && \
-                ln  -s $SAGE_LOCAL/share/jupyter/kernels/% $CONDA_DIR/share/jupyter/kernels/%_sage \
-            '"'"' \
-    ' | conda run -n sage sh && \
-    fix-permissions $CONDA_DIR && \
-    fix-permissions /home/jovyan
+#RUN echo ' \
+#        ls /opt/conda/envs/sage/share/jupyter/kernels/ | \
+#            grep -Po '"'"'python\d'"'"' | \
+#            xargs -I % sh -c '"'"' \
+#                cd $SAGE_LOCAL/share/jupyter/kernels/% && \
+#                cat kernel.json | \
+#                    jq '"'"'"'"'"'"'"'"' . | .display_name = .display_name + " (sage)" '"'"'"'"'"'"'"'"' > \
+#                    kernel.json.modified && \
+#                mv -f kernel.json.modified kernel.json && \
+#                ln  -s $SAGE_LOCAL/share/jupyter/kernels/% $CONDA_DIR/share/jupyter/kernels/%_sage \
+#            '"'"' \
+#    ' | conda run -n sage sh && \
+#    fix-permissions $CONDA_DIR && \
+#    fix-permissions /home/jovyan
+
+RUN conda clean --quiet --yes --all
+
 
 RUN jupyter labextension install jupyterlab-plotly \
   && jupyter labextension install @jupyter-widgets/jupyterlab-manager plotlywidget \
