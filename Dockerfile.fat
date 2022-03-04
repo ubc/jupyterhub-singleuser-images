@@ -57,7 +57,6 @@ USER root
 ENV SAGE_ROOT=/opt/conda/envs/sage/
 
 RUN /opt/conda/envs/sage/bin/sage -c "install_scripts('/usr/local/bin')"
-RUN jupyter kernelspec install $(/opt/conda/envs/sage/bin/sage -sh -c 'ls -d /opt/conda/envs/sage/share/jupyter/kernels/sagemath'); exit 0
 RUN ln -s "/opt/conda/envs/sage/bin/sage" /usr/bin/sage
 RUN ln -s /usr/bin/sage /usr/bin/sagemath
 RUN jupyter kernelspec install $(/opt/conda/envs/sage/bin/sage -sh -c 'ls -d /opt/conda/envs/sage/share/jupyter/kernels/sagemath'); exit 0
