@@ -34,10 +34,6 @@ RUN pip install git+https://github.com/data-8/nbgitpuller \
   && pip install jupyterlab-git \
   && pip install jupytext --upgrade
 
-# Install sagemath kernel and extensions using conda run:
-#   Create jupyter directories if they are missing
-#   Add environmental variables to sage kernal using jq
-
 RUN conda clean --quiet --yes --all
 
 RUN jupyter labextension install jupyterlab-plotly \
@@ -49,16 +45,16 @@ RUN jupyter labextension install jupyterlab-plotly \
 # nbgitpuller looks in incorrect Jinja2 Directory for Template. Temporary Solution is to Copy the files to the correct location
 # https://github.com/jupyterhub/nbgitpuller/issues/235#issuecomment-976170694
 RUN cp /opt/conda/lib/python3.9/site-packages/nbgitpuller/templates/* /opt/conda/lib/python3.9/site-packages/notebook/templates/
-
 COPY rm-merge-shortcut.py /tmp/user-settings/\@jupyterlab/shortcuts-extension/shortcuts.jupyterlab-settings
 
 USER root
 
 ENV SAGE_ROOT=/opt/conda/envs/sage/
-
 RUN /opt/conda/envs/sage/bin/sage -c "install_scripts('/usr/local/bin')"
 RUN ln -s "/opt/conda/envs/sage/bin/sage" /usr/bin/sage
 RUN ln -s /usr/bin/sage /usr/bin/sagemath
+
+# Install sagemath kernel:
 RUN jupyter kernelspec install $(/opt/conda/envs/sage/bin/sage -sh -c 'ls -d /opt/conda/envs/sage/share/jupyter/kernels/sagemath'); exit 0
 
 USER jovyan
