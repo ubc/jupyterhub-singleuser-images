@@ -1,4 +1,3 @@
-# Distributed under the terms of the Modified BSD License.
 ARG BASE_CONTAINER=jupyter/datascience-notebook
 FROM $BASE_CONTAINER
 
@@ -15,6 +14,9 @@ RUN apt-get update && \
     texlive \
     tk tk-dev \
     jq
+
+# Clean extra files and packages
+RUN apt-get update && apt-get autoclean && apt-get clean && apt-get autoremove
 
 USER jovyan
 
@@ -36,53 +38,7 @@ RUN pip install git+https://github.com/data-8/nbgitpuller \
 #   Create jupyter directories if they are missing
 #   Add environmental variables to sage kernal using jq
 
-USER root
-
-RUN /opt/conda/envs/sage/bin/sage -c "install_scripts('/usr/local/bin')"
-ARG SAGE_ROOT=/opt/conda/envs/sage/
-ENV SAGE_ROOT=/opt/conda/envs/sage/
-
-RUN ln -s "/opt/conda/envs/sage/bin/sage" /usr/bin/sage
-RUN ln -s /usr/bin/sage /usr/bin/sagemath
-
-RUN apt-get update && apt-get autoclean && apt-get clean && apt-get autoremove
-
-
-USER jovyan
-
-#RUN echo ' \
-#        from sage.repl.ipython_kernel.install import SageKernelSpec; \
-#        SageKernelSpec.update(prefix=os.environ["CONDA_DIR"]); \
-#    ' | conda run -n sage sage && \
-#    echo ' \
-#        cat $SAGE_ROOT/etc/conda/activate.d/sage-activate.sh | \
-#            grep -Po '"'"'(?<=^export )[A-Z_]+(?=)'"'"' | \
-#            jq --raw-input '"'"'.'"'"' | jq -s '"'"'.'"'"' | \
-#            jq --argfile kernel $SAGE_LOCAL/share/jupyter/kernels/sagemath/kernel.json \
-#            '"'"'. | map(. as $k | env | .[$k] as $v | {($k):$v}) | add as $vars | $kernel | .env= $vars'"'"' > \
-#            $CONDA_DIR/share/jupyter/kernels/sagemath/kernel.json \
-#    ' | conda run -n sage sh && \
-#    fix-permissions $CONDA_DIR && \
-#    fix-permissions /home/jovyan
-
-# Install sage's python kernel
-#RUN echo ' \
-#        ls /opt/conda/envs/sage/share/jupyter/kernels/ | \
-#            grep -Po '"'"'python\d'"'"' | \
-#            xargs -I % sh -c '"'"' \
-#                cd $SAGE_LOCAL/share/jupyter/kernels/% && \
-#                cat kernel.json | \
-#                    jq '"'"'"'"'"'"'"'"' . | .display_name = .display_name + " (sage)" '"'"'"'"'"'"'"'"' > \
-#                    kernel.json.modified && \
-#                mv -f kernel.json.modified kernel.json && \
-#                ln  -s $SAGE_LOCAL/share/jupyter/kernels/% $CONDA_DIR/share/jupyter/kernels/%_sage \
-#            '"'"' \
-#    ' | conda run -n sage sh && \
-#    fix-permissions $CONDA_DIR && \
-#    fix-permissions /home/jovyan
-
 RUN conda clean --quiet --yes --all
-
 
 RUN jupyter labextension install jupyterlab-plotly \
   && jupyter labextension install @jupyter-widgets/jupyterlab-manager plotlywidget \
@@ -95,6 +51,18 @@ RUN jupyter labextension install jupyterlab-plotly \
 RUN cp /opt/conda/lib/python3.9/site-packages/nbgitpuller/templates/* /opt/conda/lib/python3.9/site-packages/notebook/templates/
 
 COPY rm-merge-shortcut.py /tmp/user-settings/\@jupyterlab/shortcuts-extension/shortcuts.jupyterlab-settings
+
+USER root
+
+ENV SAGE_ROOT=/opt/conda/envs/sage/
+
+RUN /opt/conda/envs/sage/bin/sage -c "install_scripts('/usr/local/bin')"
+RUN jupyter kernelspec install $(/opt/conda/envs/sage/bin/sage -sh -c 'ls -d /opt/conda/envs/sage/share/jupyter/kernels/sagemath'); exit 0
+RUN ln -s "/opt/conda/envs/sage/bin/sage" /usr/bin/sage
+RUN ln -s /usr/bin/sage /usr/bin/sagemath
+RUN jupyter kernelspec install $(/opt/conda/envs/sage/bin/sage -sh -c 'ls -d /opt/conda/envs/sage/share/jupyter/kernels/sagemath'); exit 0
+
+USER jovyan
 
 ENV HOME=/home/jovyan
 ENV PIPELINE=github-actions
