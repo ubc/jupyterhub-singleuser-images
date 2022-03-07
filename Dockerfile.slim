@@ -1,0 +1,65 @@
+# Build Command
+# sudo docker kill $(sudo docker ps -q);  sudo docker rm $(sudo docker ps -a -q); sudo docker rmi $(sudo docker images -q); sudo docker build --squash --no-cache -t 533178462151.dkr.ecr.ca-central-1.amazonaws.com/jupyterhub:econ421-slim-001 .
+
+ARG BASE_CONTAINER=jupyter/minimal-notebook
+FROM $BASE_CONTAINER
+
+LABEL maintainer="Rahim Khoja <rahim.khoja@ubc.ca>"
+
+USER root
+
+# Update System Packages for SageMath
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    dvipng \
+    ffmpeg \
+    imagemagick \
+    texlive \
+    tk tk-dev \
+    jq && \
+    apt-get update && apt-get autoclean && \
+    apt-get clean && \
+    apt-get autoremove && \
+    ldconfig && \
+    rm -rf /var/lib/apt/lists/* /tmp/*
+
+USER jovyan
+
+# Install Conda Packages (Plotly, SageMath)
+RUN conda install --quiet --yes -n base -c conda-forge widgetsnbextension && \
+    conda create --quiet --yes -n sage sage python=3.9 && \
+    npm cache clean --force && \
+    fix-permissions $CONDA_DIR && \
+    fix-permissions /home/jovyan && \
+    conda install "jupyterlab>=3" "ipywidgets>=7.6" && \
+    conda clean --quiet --yes --all && \
+    pip install git+https://github.com/data-8/nbgitpuller && \
+    pip install jupyterlab-git && \
+    pip install jupytext --upgrade && \
+    cp /opt/conda/lib/python3.9/site-packages/nbgitpuller/templates/* /opt/conda/lib/python3.9/site-packages/notebook/templates/
+
+
+RUN jupyter labextension install @techrah/text-shortcuts \
+  && jupyter serverextension enable --sys-prefix nbgitpuller \
+  && jupyter lab build
+
+COPY rm-merge-shortcut.py /tmp/user-settings/\@jupyterlab/shortcuts-extension/shortcuts.jupyterlab-settings
+
+USER root
+
+ENV SAGE_ROOT=/opt/conda/envs/sage/
+RUN /opt/conda/envs/sage/bin/sage -c "install_scripts('/usr/local/bin')" && \
+    ln -s "/opt/conda/envs/sage/bin/sage" /usr/bin/sage && \
+    ln -s /usr/bin/sage /usr/bin/sagemath
+
+RUN jupyter kernelspec install $(/opt/conda/envs/sage/bin/sage -sh -c 'ls -d /opt/conda/envs/sage/share/jupyter/kernels/sagemath'); exit 0
+
+RUN chown -R jovyan:users /home/jovyan && \
+    chmod -R 0777 /home/jovyan && \
+    rm -rf /home/jovyan/*
+
+USER jovyan
+
+ENV HOME=/home/jovyan
+ENV PIPELINE=github-actions
+WORKDIR $HOME
