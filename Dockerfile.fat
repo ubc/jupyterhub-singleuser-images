@@ -1,3 +1,6 @@
+# Build Command
+# sudo docker kill $(sudo docker ps -q);  sudo docker rm $(sudo docker ps -a -q); sudo docker rmi $(sudo docker images -q); sudo docker build --squash --no-cache -t 533178462151.dkr.ecr.ca-central-1.amazonaws.com/jupyterhub:econ421-fat-001 .
+
 ARG BASE_CONTAINER=jupyter/datascience-notebook
 FROM $BASE_CONTAINER
 
@@ -13,28 +16,27 @@ RUN apt-get update && \
     imagemagick \
     texlive \
     tk tk-dev \
-    jq
-
-# Clean extra files and packages
-RUN apt-get update && apt-get autoclean && apt-get clean && apt-get autoremove
+    jq && \
+    ldconfig && \
+    apt-get autoclean && \
+    apt-get clean && \
+    apt-get autoremove
 
 USER jovyan
 
 # Install Conda Packages (Plotly, SageMath)
-RUN conda install --quiet --yes -n base -c conda-forge widgetsnbextension && \
-    conda create --quiet --yes -n sage sage python=3.9 && \
+RUN conda install --yes -n base -c conda-forge widgetsnbextension && \
+    conda create --yes -n sage sage python=3.9 && \
+    conda install "jupyterlab>=3" "ipywidgets>=7.6" --yes && \
+    conda install -c conda-forge -c plotly jupyter-dash --yes && \
+    conda clean --yes --all && \
+    pip install git+https://github.com/data-8/nbgitpuller && \
+    pip install jupyterlab-git && \
+    pip install jupytext --upgrade && \
     npm cache clean --force && \
     fix-permissions $CONDA_DIR && \
-    fix-permissions /home/jovyan
-RUN conda install "jupyterlab>=3" "ipywidgets>=7.6"
-RUN conda install -c conda-forge -c plotly jupyter-dash
-
-# Install jupyter extensions (nbgitpuller, git, jupytext)
-RUN pip install git+https://github.com/data-8/nbgitpuller \
-  && pip install jupyterlab-git \
-  && pip install jupytext --upgrade
-
-RUN conda clean --quiet --yes --all
+    fix-permissions /home/jovyan && \
+    cp /opt/conda/lib/python3.9/site-packages/nbgitpuller/templates/* /opt/conda/lib/python3.9/site-packages/notebook/templates/
 
 RUN jupyter labextension install jupyterlab-plotly \
   && jupyter labextension install @jupyter-widgets/jupyterlab-manager plotlywidget \
@@ -42,20 +44,20 @@ RUN jupyter labextension install jupyterlab-plotly \
   && jupyter serverextension enable --sys-prefix nbgitpuller \
   && jupyter lab build
 
-# nbgitpuller looks in incorrect Jinja2 Directory for Template. Temporary Solution is to Copy the files to the correct location
-# https://github.com/jupyterhub/nbgitpuller/issues/235#issuecomment-976170694
-RUN cp /opt/conda/lib/python3.9/site-packages/nbgitpuller/templates/* /opt/conda/lib/python3.9/site-packages/notebook/templates/
 COPY rm-merge-shortcut.py /tmp/user-settings/\@jupyterlab/shortcuts-extension/shortcuts.jupyterlab-settings
 
 USER root
 
 ENV SAGE_ROOT=/opt/conda/envs/sage/
-RUN /opt/conda/envs/sage/bin/sage -c "install_scripts('/usr/local/bin')"
-RUN ln -s "/opt/conda/envs/sage/bin/sage" /usr/bin/sage
-RUN ln -s /usr/bin/sage /usr/bin/sagemath
+RUN /opt/conda/envs/sage/bin/sage -c "install_scripts('/usr/local/bin')" && \
+    ln -s "/opt/conda/envs/sage/bin/sage" /usr/bin/sage && \
+    ln -s /usr/bin/sage /usr/bin/sagemath
 
-# Install sagemath kernel:
 RUN jupyter kernelspec install $(/opt/conda/envs/sage/bin/sage -sh -c 'ls -d /opt/conda/envs/sage/share/jupyter/kernels/sagemath'); exit 0
+
+RUN chown -R jovyan:users /home/jovyan && \
+    chmod -R 0777 /home/jovyan && \
+    rm -rf /home/jovyan/*
 
 USER jovyan
 
